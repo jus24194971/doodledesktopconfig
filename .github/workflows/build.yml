@@ -81,6 +81,18 @@ jobs:
               fail=1
             fi
             echo "    arch = $(lipo -archs "$app/Contents/MacOS/Mesh Rider Configurator" 2>/dev/null || echo unknown)"
+
+            # Apple Silicon refuses to exec an unsigned arm64 binary, so an unsigned bundle is
+            # not merely "untrusted" — it cannot start at all. Ad-hoc is enough to run; this
+            # check exists because the failure mode ("app is damaged") points nowhere near the
+            # real cause.
+            if codesign --verify --deep --strict "$app" 2>/dev/null; then
+              authority=$(codesign -dv "$app" 2>&1 | grep -E '^(Authority|Signature)' | head -1)
+              echo "    signature = valid  ${authority:-(ad-hoc)}"
+            else
+              echo "::error::$app has no valid code signature — it will not launch on Apple Silicon"
+              fail=1
+            fi
           done
           exit $fail
 

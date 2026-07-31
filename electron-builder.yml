@@ -17,6 +17,10 @@ files:
 
 asar: true
 
+# Ad-hoc signs the macOS bundle so Apple Silicon will actually execute it. No-op on
+# Windows and Linux, and skipped when a real signing certificate is configured.
+afterPack: build/afterPack.cjs
+
 # There are no native modules — ssh2's optional cpu-features/nan bindings are not installed, so
 # it runs in pure-JS mode. Skipping the rebuild step avoids needing MSVC toolchain on the builder.
 npmRebuild: false

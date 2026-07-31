@@ -112,19 +112,28 @@ Requires macOS 11 Big Sur or newer. Open the DMG and drag the app to Application
 
 ### Two gates you will hit
 
-**1. Gatekeeper.** The build is unsigned and un-notarised, so macOS quarantines it on download and
-refuses to open it — usually with the misleading message *"the app is damaged and can't be
-opened"*. It is not damaged; that is just what an unsigned quarantined app looks like. Clear the
-quarantine flag after copying it to Applications:
+**1. Gatekeeper.** The build carries an ad-hoc signature but is not notarised, so macOS quarantines
+it on download. Right-click the app in Applications and choose **Open**, then confirm — that
+registers an exception, and normal double-clicking works from then on. If it still refuses, clear
+the quarantine flag:
 
 ```bash
 xattr -cr "/Applications/Mesh Rider Configurator.app"
 ```
 
-Removing that step permanently requires an Apple Developer Program membership ($99/year) to sign
-and notarise. The build is already configured for it — hardened runtime is on and entitlements are
-in place — so it only needs `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`
-and `APPLE_TEAM_ID` in the environment.
+> **Why the app is ad-hoc signed.** Apple Silicon will not execute *any* arm64 binary without a
+> valid signature — the kernel rejects it before Gatekeeper is even involved. A completely unsigned
+> bundle fails to launch with *"the application is damaged and can't be opened"*, and `xattr -cr`
+> does **not** fix that, because quarantine is not the cause. electron-builder ships bundles
+> unsigned when no certificate is configured, so [`build/afterPack.cjs`](build/afterPack.cjs)
+> applies an ad-hoc signature (`codesign --sign -`) to the frameworks and then the bundle. CI fails
+> the build if the result does not verify.
+
+Removing the Gatekeeper prompt entirely requires an Apple Developer Program membership ($99/year)
+to sign and notarise. The build is already configured for it — hardened runtime is on and
+entitlements are in place, and the ad-hoc step steps aside automatically when `CSC_LINK` is set —
+so it only needs `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and
+`APPLE_TEAM_ID` in the environment.
 
 **2. Local network permission.** On macOS 15 Sequoia and later, reaching devices on the LAN needs
 explicit consent. The first time the app contacts a radio, macOS prompts for local network access —
