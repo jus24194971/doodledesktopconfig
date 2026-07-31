@@ -99,6 +99,41 @@ automatically.
 Settings and the radio inventory live in `%APPDATA%\doodledesktopconfig\config.json` and are
 deliberately preserved across uninstall/reinstall.
 
+## Installing on macOS
+
+Separate builds are produced per architecture — pick the one matching your Mac:
+
+| File | For |
+| --- | --- |
+| `Mesh Rider Configurator-<version>-arm64.dmg` | Apple Silicon (M1 and later) |
+| `Mesh Rider Configurator-<version>-x64.dmg` | Intel |
+
+Requires macOS 11 Big Sur or newer. Open the DMG and drag the app to Applications.
+
+### Two gates you will hit
+
+**1. Gatekeeper.** The build is unsigned and un-notarised, so macOS quarantines it on download and
+refuses to open it — usually with the misleading message *"the app is damaged and can't be
+opened"*. It is not damaged; that is just what an unsigned quarantined app looks like. Clear the
+quarantine flag after copying it to Applications:
+
+```bash
+xattr -cr "/Applications/Mesh Rider Configurator.app"
+```
+
+Removing that step permanently requires an Apple Developer Program membership ($99/year) to sign
+and notarise. The build is already configured for it — hardened runtime is on and entitlements are
+in place — so it only needs `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`
+and `APPLE_TEAM_ID` in the environment.
+
+**2. Local network permission.** On macOS 15 Sequoia and later, reaching devices on the LAN needs
+explicit consent. The first time the app contacts a radio, macOS prompts for local network access —
+**you must allow it**, or every radio will simply show as offline with no obvious cause. If it was
+dismissed by accident, re-enable it under *System Settings → Privacy & Security → Local Network*.
+
+Settings and the radio inventory live in
+`~/Library/Application Support/doodledesktopconfig/config.json`.
+
 ## Building installers
 
 ```bash
@@ -109,9 +144,18 @@ npm run pack:win
 building an installer, which is much faster when you just want to test the packaged app. Output
 lands in `release/`.
 
-Pushing a `v*` tag builds all three platforms in GitHub Actions and attaches the installers to a
-Release — see [`.github/workflows/build.yml`](.github/workflows/build.yml). CI is the easier path
-for macOS and Linux artifacts.
+**A macOS build can only be produced on a Mac.** electron-builder refuses the target on Windows
+outright (`Build for macOS is supported only on macOS`), because creating a DMG needs `hdiutil` and
+signing an `.app` needs Apple's toolchain — neither exists off-platform. Linux can produce an
+unsigned `.zip` but not a `.dmg`.
+
+So use CI for macOS. Every push to `main` builds all three platforms and uploads the installers as
+workflow artifacts (kept 30 days); pushing a `v*` tag additionally attaches them to a GitHub
+Release. See [`.github/workflows/build.yml`](.github/workflows/build.yml).
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
 
 The app icon is generated from a script rather than checked in as opaque binary art:
 

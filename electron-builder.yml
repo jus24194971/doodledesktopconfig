@@ -50,9 +50,45 @@ portable:
   artifactName: ${productName}-${version}-Portable.${ext}
 
 mac:
-  icon: build/icon.png
+  icon: build/icon.icns
   category: public.app-category.utilities
-  target: [dmg, zip]
+  # Build both slices explicitly. Without this, electron-builder targets only the build
+  # machine's own architecture — and GitHub's macos-latest runners are Apple Silicon, so
+  # the result would silently refuse to launch on any Intel Mac.
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  minimumSystemVersion: '11.0'
+  darkModeSupport: true
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    # macOS 15 (Sequoia) gates access to LAN devices behind an explicit permission prompt.
+    # Radios live on the local network, so without this key the app is denied silently and
+    # every radio simply appears offline. The string is what the system prompt shows.
+    NSLocalNetworkUsageDescription: >-
+      Mesh Rider Configurator needs local network access to discover and configure
+      Doodle Labs radios on your network.
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  # Standard drag-to-install layout.
+  contents:
+    - x: 140
+      y: 190
+      type: file
+    - x: 400
+      y: 190
+      type: link
+      path: /Applications
+  window:
+    width: 540
+    height: 380
 
 linux:
   icon: build/icon.png

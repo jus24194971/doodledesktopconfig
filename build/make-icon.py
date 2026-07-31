@@ -1,17 +1,24 @@
 """
 Generate the application icon set from a single vector-ish description.
 
-Run with `python build/make-icon.py`. Produces build/icon.ico (Windows),
-build/icon.png (Linux) and build/icon.icns source art (macOS uses the 1024 png).
+Run with `python build/make-icon.py`. Produces:
+  build/icon.ico   Windows, 7 sizes
+  build/icon.icns  macOS, 10 entries covering 16pt through 512pt@2x
+  build/icon.png   Linux and general use, 1024x1024
 
 The mark is a rounded square carrying the app's accent-to-violet gradient, with a
 four-node mesh drawn over it — a hub linked to three peers, which reads as a mesh
 network rather than a generic wifi fan. Everything is drawn at 8x and downsampled
 so the curves stay clean at 16px.
+
+The .icns is written by hand rather than shelled out to `iconutil`, so the full
+icon set can be regenerated from Windows or Linux as well as macOS.
 """
 
 from PIL import Image, ImageDraw
+import io
 import os
+import struct
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -88,20 +95,64 @@ def build_master():
     return icon.resize((BASE, BASE), Image.LANCZOS)
 
 
+# macOS icon set: OSType -> pixel dimension. The @2x entries carry the same pixel
+# count as a larger @1x entry, but macOS picks between them by display scale, so
+# both must be present for the icon to stay sharp on Retina.
+ICNS_ENTRIES = [
+    ("icp4", 16),    # 16pt
+    ("icp5", 32),    # 32pt
+    ("icp6", 64),    # 64pt
+    ("ic07", 128),   # 128pt
+    ("ic08", 256),   # 256pt
+    ("ic09", 512),   # 512pt
+    ("ic10", 1024),  # 512pt@2x
+    ("ic11", 32),    # 16pt@2x
+    ("ic12", 64),    # 32pt@2x
+    ("ic13", 256),   # 128pt@2x
+    ("ic14", 512),   # 256pt@2x
+]
+
+
+def write_icns(master_1024, path):
+    """Assemble a PNG-based .icns container.
+
+    Layout is: 'icns' + total length, then one chunk per entry, each being a
+    4-byte OSType, a big-endian uint32 length *including* its own 8-byte header,
+    and the raw PNG bytes.
+    """
+    chunks = []
+    for ostype, px in ICNS_ENTRIES:
+        img = master_1024 if px == 1024 else master_1024.resize((px, px), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        data = buf.getvalue()
+        chunks.append(ostype.encode("ascii") + struct.pack(">I", len(data) + 8) + data)
+
+    body = b"".join(chunks)
+    with open(path, "wb") as fh:
+        fh.write(b"icns" + struct.pack(">I", len(body) + 8) + body)
+    return len(body) + 8
+
+
 def main():
     master = build_master()
 
-    # A 1024px master for macOS / stores / readme use.
+    # A 1024px master for macOS / Linux / readme use.
     big = build_master().resize((1024, 1024), Image.LANCZOS)
     big.save(os.path.join(HERE, "icon.png"))
 
-    sizes = [16, 24, 32, 48, 64, 128, 256]
+    ico_sizes = [16, 24, 32, 48, 64, 128, 256]
     master.save(
         os.path.join(HERE, "icon.ico"),
         format="ICO",
-        sizes=[(s, s) for s in sizes],
+        sizes=[(s, s) for s in ico_sizes],
     )
-    print("wrote icon.ico ({}) and icon.png (1024)".format(", ".join(f"{s}x{s}" for s in sizes)))
+
+    icns_bytes = write_icns(big, os.path.join(HERE, "icon.icns"))
+
+    print("icon.ico   {}".format(", ".join(f"{s}x{s}" for s in ico_sizes)))
+    print("icon.icns  {} entries, {:.0f} KB".format(len(ICNS_ENTRIES), icns_bytes / 1024))
+    print("icon.png   1024x1024")
 
 
 if __name__ == "__main__":
