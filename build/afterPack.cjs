@@ -22,44 +22,17 @@ const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
-/** Signature order matters: nested code must be signed before whatever encloses it. */
-function collectNested(appPath) {
-  const targets = []
-  const frameworks = path.join(appPath, 'Contents', 'Frameworks')
-
-  if (fs.existsSync(frameworks)) {
-    for (const entry of fs.readdirSync(frameworks)) {
-      const full = path.join(frameworks, entry)
-      // Helper .app bundles and .framework bundles are signed as units; loose .dylib files
-      // are signed directly.
-      if (/\.(app|framework|dylib)$/.test(entry)) targets.push(full)
-    }
+/** Run codesign, surfacing its stderr on failure — the message is the whole diagnosis. */
+function codesign(args) {
+  try {
+    return execFileSync('codesign', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+  } catch (err) {
+    const stderr = (err.stderr || '').toString().trim()
+    const stdout = (err.stdout || '').toString().trim()
+    throw new Error(
+      `codesign ${args.join(' ')}\n${stderr || stdout || err.message}`
+    )
   }
-
-  // Native addons shipped outside the asar (none today, but ssh2 would land here if its
-  // optional cpu-features binding were ever installed).
-  const unpacked = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked')
-  if (fs.existsSync(unpacked)) {
-    const walk = (dir) => {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const full = path.join(dir, entry.name)
-        if (entry.isDirectory()) walk(full)
-        else if (entry.name.endsWith('.node')) targets.push(full)
-      }
-    }
-    walk(unpacked)
-  }
-
-  // Deepest first.
-  return targets.sort((a, b) => b.split(path.sep).length - a.split(path.sep).length)
-}
-
-function codesign(target) {
-  execFileSync(
-    'codesign',
-    ['--force', '--sign', '-', '--timestamp=none', target],
-    { stdio: ['ignore', 'ignore', 'pipe'] }
-  )
 }
 
 module.exports = async function afterPack(context) {
@@ -78,16 +51,15 @@ module.exports = async function afterPack(context) {
     throw new Error(`afterPack: expected bundle not found at ${appPath}`)
   }
 
-  const nested = collectNested(appPath)
-  for (const target of nested) codesign(target)
-  codesign(appPath)
+  // Let codesign walk the bundle itself. Its --deep traversal signs nested frameworks and
+  // helper apps inside-out in the correct order; hand-rolling that ordering is fragile, and
+  // Apple's objection to --deep concerns per-binary entitlements during *distribution*
+  // signing, which does not apply to an ad-hoc signature.
+  codesign(['--force', '--deep', '--sign', '-', '--timestamp=none', appPath])
 
   // Fail the build rather than emit a bundle that cannot launch.
-  execFileSync('codesign', ['--verify', '--deep', '--strict', appPath], {
-    stdio: ['ignore', 'ignore', 'pipe']
-  })
+  codesign(['--verify', '--deep', '--strict', appPath])
 
-  console.log(
-    `  • afterPack: ad-hoc signed ${appName} (${nested.length} nested item(s)) for ${context.arch === 1 ? 'x64' : 'arm64'}`
-  )
+  const archName = { 0: 'ia32', 1: 'x64', 3: 'arm64', 4: 'universal' }[context.arch] ?? String(context.arch)
+  console.log(`  • afterPack: ad-hoc signed ${appName} (${archName})`)
 }
