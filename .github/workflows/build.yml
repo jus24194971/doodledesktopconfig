@@ -51,6 +51,39 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # These Info.plist keys are load-bearing and easy to lose in a config edit:
+      # without NSLocalNetworkUsageDescription, macOS 15 denies LAN access silently and
+      # every radio reads as offline. Fail the build rather than ship that.
+      - name: Verify macOS bundle metadata
+        if: matrix.platform == 'mac'
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail=0
+          shopt -s nullglob
+          apps=(release/mac*/*.app)
+          if [ ${#apps[@]} -eq 0 ]; then echo "::error::no .app bundle produced"; exit 1; fi
+
+          for app in "${apps[@]}"; do
+            plist="$app/Contents/Info.plist"
+            echo "=== $app"
+            for key in NSLocalNetworkUsageDescription LSMinimumSystemVersion CFBundleIdentifier CFBundleShortVersionString; do
+              if value=$(/usr/libexec/PlistBuddy -c "Print :$key" "$plist" 2>/dev/null); then
+                echo "    $key = $value"
+              else
+                echo "::error::$app is missing Info.plist key $key"
+                fail=1
+              fi
+            done
+            # Confirm the icon actually landed, rather than silently falling back to Electron's.
+            if [ ! -f "$app/Contents/Resources/icon.icns" ]; then
+              echo "::error::$app is missing Resources/icon.icns"
+              fail=1
+            fi
+            echo "    arch = $(lipo -archs "$app/Contents/MacOS/Mesh Rider Configurator" 2>/dev/null || echo unknown)"
+          done
+          exit $fail
+
       - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
