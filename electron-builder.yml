@@ -1,0 +1,64 @@
+appId: com.doodledesktopconfig.app
+productName: Mesh Rider Configurator
+copyright: Copyright © 2026
+
+directories:
+  output: release
+  buildResources: build
+
+# electron-vite externalises runtime dependencies, so `ssh2` is loaded from node_modules at
+# runtime rather than bundled. electron-builder picks up everything in "dependencies"
+# automatically; the globs below only need to cover our own build output.
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+  - '!**/*.md'
+
+asar: true
+
+# There are no native modules — ssh2's optional cpu-features/nan bindings are not installed, so
+# it runs in pure-JS mode. Skipping the rebuild step avoids needing MSVC toolchain on the builder.
+npmRebuild: false
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  # Shown in the file properties dialog and in SmartScreen prompts.
+  legalTrademarks: ''
+
+nsis:
+  # A wizard rather than a silent one-click install, so the user can pick a location.
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Mesh Rider Configurator
+  uninstallDisplayName: Mesh Rider Configurator
+  # Keep the radio inventory and saved scripts across an uninstall/reinstall cycle.
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+  artifactName: ${productName}-${version}-Setup.${ext}
+
+portable:
+  artifactName: ${productName}-${version}-Portable.${ext}
+
+mac:
+  icon: build/icon.png
+  category: public.app-category.utilities
+  target: [dmg, zip]
+
+linux:
+  icon: build/icon.png
+  category: Utility
+  target: [AppImage, deb]
+  maintainer: jus24194971
+  desktop:
+    Name: Mesh Rider Configurator
+    Comment: Configure and monitor Doodle Labs Mesh Rider radios

@@ -81,13 +81,63 @@ Work on the interface with no radios attached — serves a demo dataset in a bro
 npm run dev:ui
 ```
 
-Package a distributable:
+## Installing on Windows
+
+Two artifacts are produced, both x64:
+
+| File | What it is |
+| --- | --- |
+| `Mesh Rider Configurator-<version>-Setup.exe` | Installer. Wizard lets you choose the install location, creates Start Menu and desktop shortcuts, and registers an uninstaller. Installs per-user, so **no admin rights needed**. |
+| `Mesh Rider Configurator-<version>-Portable.exe` | Single self-contained executable. Nothing is installed — run it from a USB stick if you like. |
+
+The build is **not code-signed**, so on first launch Windows SmartScreen shows
+"Windows protected your PC". Click **More info → Run anyway**. Removing that prompt requires an
+Authenticode code-signing certificate (a paid, identity-verified purchase from a CA); drop the
+`.pfx` path in `CSC_LINK` and its password in `CSC_KEY_PASSWORD` and electron-builder will sign
+automatically.
+
+Settings and the radio inventory live in `%APPDATA%\doodledesktopconfig\config.json` and are
+deliberately preserved across uninstall/reinstall.
+
+## Building installers
 
 ```bash
 npm run pack:win
 ```
 
-`pack:mac` and `pack:linux` are also available. Build output lands in `release/`.
+`pack:mac` and `pack:linux` are also available; `pack:dir` produces an unpacked folder without
+building an installer, which is much faster when you just want to test the packaged app. Output
+lands in `release/`.
+
+Pushing a `v*` tag builds all three platforms in GitHub Actions and attaches the installers to a
+Release — see [`.github/workflows/build.yml`](.github/workflows/build.yml). CI is the easier path
+for macOS and Linux artifacts.
+
+The app icon is generated from a script rather than checked in as opaque binary art:
+
+```bash
+npm run icon
+```
+
+### If a Windows build fails on symlinks
+
+electron-builder downloads a `winCodeSign` bundle that contains macOS symlinks. Extracting those
+on Windows needs privileges a normal account lacks, and the build dies with:
+
+```
+ERROR: Cannot create symbolic link : A required privilege is not held by the client.
+```
+
+The tidiest fix is to turn on **Settings → System → For developers → Developer Mode**, which lets
+non-admin accounts create symlinks. Otherwise, pre-extract the bundle without the macOS directory —
+it is never needed for a Windows build:
+
+```bash
+cd "$LOCALAPPDATA/electron-builder/Cache/winCodeSign"
+7za x <downloaded>.7z -owinCodeSign-2.6.0 '-x!darwin' -y
+```
+
+GitHub Actions runners have the necessary privileges, so CI builds are unaffected.
 
 ## Connecting to a radio
 
